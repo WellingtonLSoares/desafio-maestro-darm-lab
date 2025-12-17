@@ -1,4 +1,4 @@
-from app.schemas import login_schema 
+from app.schemas import login_schema, generic_schema
 
 responses_docs = {
   400: {
@@ -32,5 +32,36 @@ login_responses = {
           "example": {"detail": "Você possui 3 tentativas. Conta bloqueada por 30s."}
         }
       }
+  }
+}
+
+password_responses = {
+  200: {
+    "description": "Operação realizada com sucesso",
+    "model": generic_schema.MessageResponse
+  },
+  400: {
+    "description": "Erro de validação (Código inválido/expirado)",
+    "content": {
+      "application/json": {
+        "example": {"detail": "O código expirou. Solicite um novo."}
+      }
+    }
+  },
+  403: {
+    "description": "Bloqueio temporário",
+    "content": {
+      "application/json": {
+        "example": {"detail": "Muitas tentativas falhas. Tente novamente em 30 minutos."}
+      }
+    }
+  },
+  404: {
+    "description": "Recurso não encontrado",
+    "content": {
+      "application/json": {
+        "example": {"detail": "E-mail não encontrado no sistema."}
+      }
+    }
   }
 }
