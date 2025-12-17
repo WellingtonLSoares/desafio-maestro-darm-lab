@@ -15,6 +15,8 @@ class User(Base):
 
   term_agreement = relationship("UserTerm", back_populates="user", uselist=False)
 
+  user_stories = relationship("UserStory", back_populates="owner")
+
   # separar isso em uma tabela controle de acesso futuramente
   failed_login_attempts = Column(Integer, default=0)
   last_failed_login = Column(DateTime(timezone=True), nullable=True)
