@@ -28,3 +28,5 @@ coverage.xml
 dist/
 build/
 *.egg-info/
+
+passos.txt
