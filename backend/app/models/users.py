@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date
+from sqlalchemy import Column, Integer, String, Date, DateTime
 from app.database import Base
 from sqlalchemy.orm import relationship
 
@@ -14,3 +14,6 @@ class User(Base):
   hashed_password = Column(String, nullable=False)
 
   term_agreement = relationship("UserTerm", back_populates="user", uselist=False)
+
+  failed_login_attempts = Column(Integer, default=0)
+  last_failed_login = Column(DateTime(timezone=True), nullable=True)
