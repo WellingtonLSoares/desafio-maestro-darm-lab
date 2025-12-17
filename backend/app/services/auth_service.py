@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from fastapi import HTTPException, status
 from passlib.context import CryptContext
 from datetime import date, datetime, timezone, timedelta
@@ -103,7 +103,14 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 def authenticate_user(db: Session, login_data: login_schema.UserLogin):
   LOCKOUT_DURATION_SECONDS = 30
-  user = db.query(User).filter(User.email == login_data.email).first()
+  user = db.query(User).filter(User.email == login_data.email).options(load_only(
+    User.id,
+    User.username,
+    User.email,
+    User.hashed_password,
+    User.failed_login_attempts,
+    User.last_failed_login
+  )).first()
 
   if not user:
     raise HTTPException(
