@@ -15,5 +15,11 @@ class User(Base):
 
   term_agreement = relationship("UserTerm", back_populates="user", uselist=False)
 
+  # separar isso em uma tabela controle de acesso futuramente
   failed_login_attempts = Column(Integer, default=0)
   last_failed_login = Column(DateTime(timezone=True), nullable=True)
+
+  reset_code = Column(String, nullable=True)
+  reset_code_expires_at = Column(DateTime(timezone=True), nullable=True)
+  failed_reset_attempts = Column(Integer, default=0)
+  last_failed_reset_attempt = Column(DateTime(timezone=True), nullable=True)
