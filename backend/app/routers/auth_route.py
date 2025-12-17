@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas import userschema, login_schema
+from app.schemas import userschema, login_schema, forgot_password_schema, generic_schema
 from app.services import auth_service
-from app.docs.auth_responses import responses_docs, login_responses
+from app.docs.auth_responses import responses_docs, login_responses, password_responses
 from datetime import timedelta
 
 router = APIRouter(
@@ -56,3 +56,26 @@ def login(login_data: login_schema.UserLogin, db: Session = Depends(get_db)):
     "user_id": user.id,
     "username": user.username
   }
+
+@router.post(
+  "/esqueceu-senha/solicitar", 
+  response_model=generic_schema.MessageResponse,
+  responses=password_responses
+)
+def solicitar_codigo(data: forgot_password_schema.ForgotPasswordRequest, db: Session = Depends(get_db)):
+  """
+  Passo 1: Usuário informa e-mail e recebe o código.
+  """
+  return auth_service.request_password_reset(db, data.email)
+
+@router.post(
+  "/esqueceu-senha/redefinir", 
+  response_model=generic_schema.MessageResponse,
+  responses=password_responses
+)
+def redefinir_senha_com_codigo(data: forgot_password_schema.ResetPasswordRequest, db: Session = Depends(get_db)):
+  """
+  Passo 2: Usuário envia E-mail + Código + Nova Senha.
+  - O sistema valida tudo e altera a senha se estiver correto.
+  """
+  return auth_service.reset_password(db, data)
