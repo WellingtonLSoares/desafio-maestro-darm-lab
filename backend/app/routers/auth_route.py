@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas import userschema
+from app.schemas import userschema, login_schema
 from app.services import auth_service
-from app.docs.auth_responses import responses_docs
+from app.docs.auth_responses import responses_docs, login_responses
+from datetime import timedelta
 
 router = APIRouter(
   prefix="/autenticacao",
@@ -26,3 +27,32 @@ def cadastro(user: userschema.UserCreate, db: Session = Depends(get_db)):
   """
 
   return auth_service.create_user(db=db, user_input=user)
+
+@router.post(
+  "/login", 
+  response_model=login_schema.Token,
+  responses=login_responses
+)
+def login(login_data: login_schema.UserLogin, db: Session = Depends(get_db)):
+  """
+  Realiza o login do usuário.
+  - Verifica credenciais.
+  - Bloqueia após 3 tentativas erradas (30s).
+  - Retorna Token JWT (Bearer).
+  """
+  user = auth_service.authenticate_user(db, login_data)
+  validade_token = timedelta(minutes=30)
+
+  if login_data.remember_me:
+    validade_token = timedelta(hours=24)
+
+  access_token = auth_service.create_access_token(
+    data={"sub": user.email},
+    expires_delta=validade_token
+  )
+  
+  return {
+    "access_token": access_token,
+    "user_id": user.id,
+    "username": user.username
+  }
