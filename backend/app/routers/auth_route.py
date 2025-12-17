@@ -5,6 +5,8 @@ from app.schemas import userschema, login_schema, forgot_password_schema, generi
 from app.services import auth_service
 from app.docs.auth_responses import responses_docs, login_responses, password_responses
 from datetime import timedelta
+from app.dependencies import get_current_user  # <--- IMPORT NOVO
+from app.models.users import User
 
 router = APIRouter(
   prefix="/autenticacao",
@@ -79,3 +81,11 @@ def redefinir_senha_com_codigo(data: forgot_password_schema.ResetPasswordRequest
   - O sistema valida tudo e altera a senha se estiver correto.
   """
   return auth_service.reset_password(db, data)
+
+@router.get("/me", response_model=userschema.UserResponse)
+def ler_dados_do_usuario_atual(current_user: User = Depends(get_current_user)):
+  """
+  Retorna os dados do usuário logado.
+  🔒 Exige Autenticação (Token JWT).
+  """
+  return current_user
