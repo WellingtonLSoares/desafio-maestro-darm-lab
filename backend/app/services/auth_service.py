@@ -1,12 +1,21 @@
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from passlib.context import CryptContext
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 import re
+import os
+from jose import jwt
+from dotenv import load_dotenv
 
 from app.models.users import User
 from app.models.user_term import UserTerm
-from app.schemas import userschema
+from app.schemas import userschema, login_schema
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -75,3 +84,69 @@ def create_user(db: Session, user_input: userschema.UserCreate):
     print(error)
 
     raise HTTPException(status_code=500, detail="Erro interno do servidor ao processar requisição.")
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+  to_encode = data.copy()
+  
+  if expires_delta:
+    expire = datetime.now(timezone.utc) + expires_delta
+  else:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+  
+  to_encode.update({"exp": expire})
+  
+  if not SECRET_KEY:
+    raise HTTPException(status_code=500, detail="Erro de configuração: SECRET_KEY não definida.")
+
+  encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+  return encoded_jwt
+
+def authenticate_user(db: Session, login_data: login_schema.UserLogin):
+  LOCKOUT_DURATION_SECONDS = 30
+  user = db.query(User).filter(User.email == login_data.email).first()
+
+  if not user:
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Usuário ou senha incorretos"
+    )
+
+  if user.failed_login_attempts >= 3:
+    if user.last_failed_login:
+      last_fail = user.last_failed_login
+
+      if last_fail.tzinfo is None:
+        last_fail = last_fail.replace(tzinfo=timezone.utc)
+          
+      time_since_last_fail = datetime.now(timezone.utc) - last_fail
+      
+      if time_since_last_fail.total_seconds() < LOCKOUT_DURATION_SECONDS:
+        raise HTTPException(
+          status_code=status.HTTP_403_FORBIDDEN, 
+          detail=f"Você possui 3 tentativas. Conta bloqueada por {LOCKOUT_DURATION_SECONDS}s."
+        )
+      else:
+        user.failed_login_attempts = 0
+        db.commit()
+
+  if not verify_password(login_data.password, user.hashed_password):
+    user.failed_login_attempts += 1
+    user.last_failed_login = datetime.now(timezone.utc)
+    db.commit()
+
+    if user.failed_login_attempts >= 3:
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, 
+        detail=f"Você possui 3 tentativas. Conta bloqueada por {LOCKOUT_DURATION_SECONDS}s."
+      )
+    
+    # Senha errada -> 401
+    raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Usuário ou senha incorretos"
+    )
+
+  user.failed_login_attempts = 0
+  db.commit()
+
+  return user
