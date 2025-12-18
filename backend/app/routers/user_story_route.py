@@ -88,7 +88,6 @@ def associate_item_to_story(
   db: Session = Depends(get_db),
   current_user: User = Depends(get_current_user)
 ):
-  # Definimos fixo que a origem é "US"
   return association_service.create_association(
     db, "US", story_id, association, current_user.id
   )

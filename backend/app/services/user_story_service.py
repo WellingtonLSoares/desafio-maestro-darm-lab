@@ -8,6 +8,72 @@ from app.core import logger
 from app.services import association_service
 from app.utils.type_mapper import get_model_by_type
 
+def fetch_items_cache(db: Session, associations: list) -> dict:
+  """
+  Recebe uma lista de associações, agrupa por tipo(RN),
+  busca todos os itens reais no banco de uma vez
+  e retorna um dicionário.
+  
+  Retorno: {'RN': {1: ObjetoRN, 2: ObjetoRN}, 'RF': {...}}
+  """
+  if not associations:
+    return {}
+
+  ids_by_type = {}
+  for assoc in associations:
+    ids_by_type.setdefault(assoc.target_type, set()).add(assoc.target_id)
+
+  items_cache = {}
+  for item_type, ids in ids_by_type.items():
+    model = get_model_by_type(item_type)
+
+    if model:
+      found_items = db.query(model).filter(model.id.in_(ids)).all()
+      items_cache[item_type] = {item.id: item for item in found_items}
+  
+  return items_cache
+
+def serialize_associations(associations: list, items_cache: dict) -> list:
+  """
+  Formata a lista final para o JSON, cruzando a associação com o item real do cache.
+  """
+  result = []
+  for assoc in associations:
+    type_cache = items_cache.get(assoc.target_type, {})
+    item = type_cache.get(assoc.target_id)
+
+    if item:
+      result.append({
+        "type": assoc.target_type,
+        "id": assoc.target_id,
+        "display_id": item.display_id,
+        "title": item.title
+      })
+
+  return result
+
+def get_story_response(db: Session, story: UserStory):
+  """
+  Constrói a resposta completa para UMA história (usado no Create/Update).
+  """
+  associations = db.query(ItemAssociation).filter(
+    ItemAssociation.source_id == story.id,
+    ItemAssociation.source_type == "US"
+  ).all()
+
+  cache = fetch_items_cache(db, associations)
+  formatted_items = serialize_associations(associations, cache)
+
+  return {
+    "id": story.id,
+    "display_id": story.display_id,
+    "title": story.title,
+    "description": story.description,
+    "owner_id": story.owner_id,
+    "created_at": story.created_at,
+    "associated_items": formatted_items
+  }
+
 def create_user_story(db: Session, story_data: UserStoryCreate, current_user_id: int):
   db_story = db.query(UserStory).filter(UserStory.title == story_data.title).options(
     load_only(
@@ -42,11 +108,10 @@ def create_user_story(db: Session, story_data: UserStoryCreate, current_user_id:
         current_user_id
       )
 
-  return new_story
+  return get_story_response(db, new_story)
 
 def get_stories_paginated(db: Session, skip: int = 0, limit: int = 10):
   query = db.query(UserStory).order_by(UserStory.created_at.desc())
-
   total = query.count()
   stories = query.offset(skip).limit(limit).all()
 
@@ -57,31 +122,17 @@ def get_stories_paginated(db: Session, skip: int = 0, limit: int = 10):
     ItemAssociation.source_id.in_(story_ids)
   ).all()
 
+  full_cache = fetch_items_cache(db, associations)
+
+  results = []
+
   assoc_map = {}
   for assoc in associations:
     assoc_map.setdefault(assoc.source_id, []).append(assoc)
 
-  results = []
-
   for story in stories:
-    associated_data = []
-
-    for assoc in assoc_map.get(story.id, []):
-      model = get_model_by_type(assoc.target_type)
-      
-      if not model:
-        continue
-
-      target_item = db.query(model).filter(model.id == assoc.target_id).first()
-      if not target_item:
-        continue
-
-      associated_data.append({
-        "type": assoc.target_type,
-        "id": assoc.target_id,
-        "display_id": target_item.display_id,
-        "title": target_item.title
-      })
+    story_assocs = assoc_map.get(story.id, [])
+    formatted_items = serialize_associations(story_assocs, full_cache)
 
     results.append({
       "id": story.id,
@@ -90,7 +141,7 @@ def get_stories_paginated(db: Session, skip: int = 0, limit: int = 10):
       "description": story.description,
       "owner_id": story.owner_id,
       "created_at": story.created_at,
-      "associated_items": associated_data
+      "associated_items": formatted_items
     })
 
   return {
@@ -126,7 +177,7 @@ def update_user_story(db: Session, story_id: int, story_data: UserStoryCreate):
   db.commit()
   db.refresh(db_story)
 
-  return db_story
+  return get_story_response(db, db_story)
 
 def delete_user_story(db: Session, story_id: int, current_user_id: int):
   """
