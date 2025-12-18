@@ -1,18 +1,12 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
-from app.schemas.association_schema import AssociationRequest
+from app.schemas.association_schema import AssociationRequest, AssociatedItem
 
 class UserStoryCreate(BaseModel):
   title: str = Field(..., min_length=5, description="O Título da história")
   description: str = Field(..., description="Descrição detalhada ou texto rico")
   associations: Optional[List[AssociationRequest]] = []
-
-class AssociatedItem(BaseModel):
-  type: str
-  id: int
-  display_id: str
-  title: str
 
 class UserStoryResponse(BaseModel):
   id: int
