@@ -2,7 +2,10 @@ from sqlalchemy.orm import Session, load_only
 from app.models.user_story import UserStory
 from app.schemas.user_story_schema import UserStoryCreate
 from fastapi import HTTPException, status
-from sqlalchemy import and_
+from sqlalchemy import and_, desc
+from app.models.item_association import ItemAssociation
+from app.core import logger
+from app.services import association_service
 
 def create_user_story(db: Session, story_data: UserStoryCreate, current_user_id: int):
   db_story = db.query(UserStory).filter(UserStory.title == story_data.title).options(
@@ -21,13 +24,22 @@ def create_user_story(db: Session, story_data: UserStoryCreate, current_user_id:
   new_story = UserStory(
     title=story_data.title,
     description=story_data.description,
-    parent_id=story_data.parent_id,
     owner_id=current_user_id
   )
-
+  
   db.add(new_story)
   db.commit()
   db.refresh(new_story)
+
+  if story_data.associations:
+    for assoc in story_data.associations:
+      association_service.create_association(
+        db,
+        "US",
+        new_story.id,
+        assoc,
+        current_user_id
+      )
 
   return new_story
 
@@ -35,7 +47,7 @@ def get_stories_paginated(db: Session, skip: int = 0, limit: int = 10):
   """
   Retorna as histórias de forma paginada.
   """
-  query = db.query(UserStory)
+  query = db.query(UserStory).order_by(desc(UserStory.created_at))
   
   total = query.count()
   items = query.offset(skip).limit(limit).all()
@@ -45,7 +57,7 @@ def get_stories_paginated(db: Session, skip: int = 0, limit: int = 10):
     "items": items,
     "skip": skip,
     "limit": limit
-}
+  }
 
 def update_user_story(db: Session, story_id: int, story_data: UserStoryCreate):
   """
@@ -69,14 +81,13 @@ def update_user_story(db: Session, story_id: int, story_data: UserStoryCreate):
 
   db_story.title = story_data.title
   db_story.description = story_data.description
-  db_story.parent_id = story_data.parent_id
 
   db.commit()
   db.refresh(db_story)
 
   return db_story
 
-def delete_user_story(db: Session, story_id: int):
+def delete_user_story(db: Session, story_id: int, current_user_id: int):
   """
   Remove a história do sistema.
   """
@@ -86,6 +97,13 @@ def delete_user_story(db: Session, story_id: int):
 
   if not db_story:
     raise HTTPException(status_code=404, detail="História de usuário não encontrada.")
+
+  logger.info(f"[AUDIT] EXCLUSÃO_HISTORIA | User: {current_user_id} | US_ID: {story_id} | Título: {db_story.title}")
+
+  db.query(ItemAssociation).filter(
+    ItemAssociation.source_id == story_id,
+    ItemAssociation.source_type == "US"
+  ).delete()
 
   db.delete(db_story)
   db.commit()
