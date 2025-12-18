@@ -52,12 +52,12 @@ def list_stories(
 
 @router.put(
   "/{story_id}",
-  response_model=UserStoryUpdate,
+  response_model=UserStoryResponse,
   responses=user_story_update_responses
 )
 def update_story(
   story_id: int, 
-  story: UserStoryCreate, 
+  story: UserStoryUpdate, 
   db: Session = Depends(get_db),
   current_user: User = Depends(get_current_user)
 ):
@@ -79,9 +79,9 @@ def delete_story(
   """
   Exclui permanentemente uma história de usuário.
   """
-  return user_story_service.delete_user_story(db, story_id, current_user)
+  return user_story_service.delete_user_story(db, story_id, current_user.id)
 
-@router.post("/{story_id}/associar", status_code=200)
+@router.post("/{story_id}/associar", status_code=200, response_model=MessageResponse)
 def associate_item_to_story(
   story_id: int, 
   association: AssociationRequest,
@@ -92,7 +92,7 @@ def associate_item_to_story(
     db, "US", story_id, association, current_user.id
   )
 
-@router.delete("/{story_id}/desassociar", status_code=200)
+@router.delete("/{story_id}/desassociar", status_code=200, response_model=MessageResponse)
 def remove_association_from_story(
   story_id: int, 
   association: AssociationRequest,

@@ -44,10 +44,10 @@ def list_all(
 
 @router.put(
   "/{rn_id}", 
-  response_model=BusinessRuleUpdate,
+  response_model=BusinessRuleResponse,
   responses=business_rule_update_responses
 )
-def update(rn_id: int, rn: BusinessRuleCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def update(rn_id: int, rn: BusinessRuleUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
   return business_rule_service.update_rn(db, rn_id, rn)
 
 @router.delete("/{rn_id}", responses=business_rule_delete_responses)
