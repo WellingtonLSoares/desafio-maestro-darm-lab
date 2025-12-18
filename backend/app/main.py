@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.routers import auth_route, user_story_route
+from app.routers import auth_route, user_story_route, business_rule_route
 
 app = FastAPI(
   title="DARM Labs Challenge API",
@@ -47,6 +47,7 @@ app.add_middleware(
 
 app.include_router(auth_route.router)
 app.include_router(user_story_route.router)
+app.include_router(business_rule_route.router)
 
 @app.get("/")
 def read_root():
