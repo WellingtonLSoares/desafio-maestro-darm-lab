@@ -46,3 +46,7 @@ def list_all(
 )
 def update(rn_id: int, rn: BusinessRuleCreate, db: Session = Depends(get_db), user = Depends(get_current_user)):
   return business_rule_service.update_rn(db, rn_id, rn)
+
+@router.delete("/{rn_id}")
+def delete(rn_id: int, db: Session = Depends(get_db), user = Depends(get_current_user)):
+  return business_rule_service.delete_rn(db, rn_id)

@@ -50,3 +50,13 @@ def update_rn(db: Session, rn_id: int, data: BusinessRuleCreate):
   db.refresh(db_rn)
 
   return db_rn
+
+def delete_rn(db: Session, rn_id: int):
+  db_rn = db.query(BusinessRule).filter(BusinessRule.id == rn_id).first()
+  if not db_rn:
+    raise HTTPException(status_code=404, detail="Regra de Negócio não encontrada")
+  
+  db.delete(db_rn)
+  db.commit()
+  
+  return {"message": "Regra de Negócio excluída com sucesso"}
