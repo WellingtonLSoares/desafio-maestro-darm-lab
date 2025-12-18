@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, and_, or_
 from app.models.business_rule import BusinessRule
 from app.schemas.business_rule_schema import BusinessRuleCreate
 from fastapi import HTTPException
@@ -8,16 +8,16 @@ from app.services import association_service
 from app.utils.type_mapper import get_model_by_type
 from app.core.logger import logger
 
-def fetch_items_cache(db: Session, associations: list) -> dict:
+def fetch_items_cache_bidirectional(db: Session, items_to_fetch: list) -> dict:
   """
   Agrupa IDs por tipo e busca todos os itens no banco de uma vez.
   """
-  if not associations:
+  if not items_to_fetch:
     return {}
 
   ids_by_type = {}
-  for assoc in associations:
-    ids_by_type.setdefault(assoc.target_type, set()).add(assoc.target_id)
+  for item_type, item_id in items_to_fetch:
+    ids_by_type.setdefault(item_type, set()).add(item_id)
 
   items_cache = {}
   for item_type, ids in ids_by_type.items():
@@ -25,39 +25,46 @@ def fetch_items_cache(db: Session, associations: list) -> dict:
     if model:
       found_items = db.query(model).filter(model.id.in_(ids)).all()
       items_cache[item_type] = {item.id: item for item in found_items}
-  
+
   return items_cache
-
-def serialize_associations(associations: list, items_cache: dict) -> list:
-  """
-  Cruza a associação com o item real do cache para formatar o JSON.
-  """
-  result = []
-  for assoc in associations:
-    type_cache = items_cache.get(assoc.target_type, {})
-    item = type_cache.get(assoc.target_id)
-
-    if item:
-      result.append({
-        "type": assoc.target_type,
-        "id": assoc.target_id,
-        "display_id": item.display_id,
-        "title": item.title
-      })
-
-  return result
 
 def get_rn_response(db: Session, rn: BusinessRule):
   """
   Constrói a resposta completa para UMA Regra de Negócio.
   """
   associations = db.query(ItemAssociation).filter(
-    ItemAssociation.source_id == rn.id,
-    ItemAssociation.source_type == "RN"
+    or_(
+      and_(ItemAssociation.source_type == "RN", ItemAssociation.source_id == rn.id),
+      and_(ItemAssociation.target_type == "RN", ItemAssociation.target_id == rn.id)
+    )
   ).all()
 
-  cache = fetch_items_cache(db, associations)
-  formatted_items = serialize_associations(associations, cache)
+  items_to_fetch = []
+  normalized_assocs = []
+
+  for assoc in associations:
+    if assoc.source_type == "RN" and assoc.source_id == rn.id:
+      p_type, p_id = assoc.target_type, assoc.target_id
+    else:
+      p_type, p_id = assoc.source_type, assoc.source_id
+    
+    items_to_fetch.append((p_type, p_id))
+    normalized_assocs.append({'type': p_type, 'id': p_id})
+
+  cache = fetch_items_cache_bidirectional(db, items_to_fetch)
+  
+  formatted_items = []
+  for item_info in normalized_assocs:
+    type_cache = cache.get(item_info['type'], {})
+    item_obj = type_cache.get(item_info['id'])
+    
+    if item_obj:
+      formatted_items.append({
+        "type": item_info['type'],
+        "id": item_info['id'],
+        "display_id": item_obj.display_id,
+        "title": item_obj.title
+      })
 
   return {
     "id": rn.id,
@@ -101,20 +108,49 @@ def get_rns_paginated(db: Session, skip: int = 0, limit: int = 5):
 
   rn_ids = [rn.id for rn in items]
   all_associations = db.query(ItemAssociation).filter(
-    ItemAssociation.source_type == "RN",
-    ItemAssociation.source_id.in_(rn_ids)
+    or_(
+      and_(ItemAssociation.source_type == "RN", ItemAssociation.source_id.in_(rn_ids)),
+      and_(ItemAssociation.target_type == "RN", ItemAssociation.target_id.in_(rn_ids))
+    )
   ).all()
-
-  full_cache = fetch_items_cache(db, all_associations)
   
-  assoc_map = {}
-  for assoc in all_associations:
-    assoc_map.setdefault(assoc.source_id, []).append(assoc)
+  assoc_map = {} 
+  all_partners_to_fetch = []
 
+  for assoc in all_associations:
+    if assoc.source_type == "RN" and assoc.source_id in rn_ids:
+      my_rn_id = assoc.source_id
+      partner_type = assoc.target_type
+      partner_id = assoc.target_id
+
+    else:
+      my_rn_id = assoc.target_id
+      partner_type = assoc.source_type
+      partner_id = assoc.source_id
+
+    pair = (partner_type, partner_id)
+    all_partners_to_fetch.append(pair)
+    
+    assoc_map.setdefault(my_rn_id, []).append(pair)
+
+  full_cache = fetch_items_cache_bidirectional(db, all_partners_to_fetch)
+  
   results = []
   for rn in items:
-    rn_assocs = assoc_map.get(rn.id, [])
-    formatted_items = serialize_associations(rn_assocs, full_cache)
+    my_partners = assoc_map.get(rn.id, [])
+    formatted_items = []
+
+    for p_type, p_id in my_partners:
+      type_cache = full_cache.get(p_type, {})
+      item_obj = type_cache.get(p_id)
+
+      if item_obj:
+        formatted_items.append({
+          "type": p_type,
+          "id": p_id,
+          "display_id": item_obj.display_id,
+          "title": item_obj.title
+        })
 
     results.append({
       "id": rn.id,
@@ -160,9 +196,11 @@ def delete_rn(db: Session, rn_id: int, current_user_id: int):
   logger.info(f"[AUDIT] EXCLUSÃO_RN | User: {current_user_id} | RN_ID: {rn_id} | Título: {db_rn.title}")
 
   db.query(ItemAssociation).filter(
-    ItemAssociation.source_id == rn_id,
-    ItemAssociation.source_type == "RN"
-  ).delete()
+    or_(
+      and_(ItemAssociation.source_type == "RN", ItemAssociation.source_id == rn_id),
+      and_(ItemAssociation.target_type == "RN", ItemAssociation.target_id == rn_id)
+    )
+  ).delete(synchronize_session=False)
 
   db.delete(db_rn)
   db.commit()

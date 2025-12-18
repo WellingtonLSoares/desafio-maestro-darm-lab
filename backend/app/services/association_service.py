@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from fastapi import HTTPException
 from app.models.item_association import ItemAssociation
 from app.utils.type_mapper import get_model_by_type
@@ -17,19 +18,37 @@ def validate_item_exists(db: Session, item_type: str, item_id: int):
     raise HTTPException(status_code=404, detail=f"{item_type} com ID {item_id} não encontrado.")
 
 def create_association(db: Session, source_type: str, source_id: int, target_data: AssociationRequest, user_id: int):
-  validate_item_exists(db, source_type, source_id)
-  validate_item_exists(db, target_data.item_type, target_data.item_id)
+  target_type = target_data.item_type
+  target_id = target_data.item_id
 
   if source_type == target_data.item_type and source_id == target_data.item_id:
     raise HTTPException(status_code=400, detail="Um item não pode ser associado a si mesmo.")
 
-  if source_type == "US" and target_data.item_type == "US":
-    raise HTTPException(status_code=400, detail="Uma História de Usuário não pode ser associada a outra História.")
+  if source_type == target_type:
+    raise HTTPException(
+      status_code=400, 
+      detail=f"Não é permitido associar itens do mesmo tipo ({source_type} com {target_type})."
+    )
   
+  validate_item_exists(db, source_type, source_id)
+  validate_item_exists(db, target_data.item_type, target_data.item_id)
+  
+  # procura por us1 -> rn1 e rn1 -> us1
   existing_link = db.query(ItemAssociation).filter(
-    ItemAssociation.target_id == target_data.item_id,
-    ItemAssociation.target_type == target_data.item_type,
-    ItemAssociation.source_type == source_type # Se já tem vínculo com alguma US
+    or_(
+      and_(
+        ItemAssociation.source_type == source_type,
+        ItemAssociation.source_id == source_id,
+        ItemAssociation.target_type == target_type,
+        ItemAssociation.target_id == target_id
+      ),
+      and_(
+        ItemAssociation.source_type == target_type, # Invertido
+        ItemAssociation.source_id == target_id,     # Invertido
+        ItemAssociation.target_type == source_type, # Invertido
+        ItemAssociation.target_id == source_id      # Invertido
+      )
+    )
   ).first()
 
   if existing_link:
