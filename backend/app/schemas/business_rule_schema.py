@@ -10,6 +10,9 @@ class BusinessRuleBase(BaseModel):
 class BusinessRuleCreate(BusinessRuleBase):
   associations: Optional[List[AssociationRequest]] = []
 
+class BusinessRuleUpdate(BusinessRuleBase):
+  pass
+
 class BusinessRuleResponse(BusinessRuleBase):
   id: int
   display_id: str
