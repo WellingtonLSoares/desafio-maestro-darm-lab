@@ -38,7 +38,6 @@ def create_association(db: Session, source_type: str, source_id: int, target_dat
     
     return {"message": "Item já associado."}
 
-  # 5. Cria a Associação
   new_assoc = ItemAssociation(
     source_id=source_id,
     source_type=source_type,

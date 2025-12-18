@@ -57,7 +57,6 @@ def enforce_reset_lockout(user: User, db: Session):
           detail=f"Muitas tentativas falhas. Aguarde {remaining_min} minutos para tentar novamente."
         )
       else:
-        # O tempo passou, perdoamos o usuário
         user.failed_reset_attempts = 0
         db.commit()
 
