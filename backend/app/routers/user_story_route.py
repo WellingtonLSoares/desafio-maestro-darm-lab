@@ -12,6 +12,8 @@ from app.docs.user_story_responses import (
   user_story_delete_responses,
   user_story_update_responses
 )
+from app.services import association_service
+from app.schemas.association_schema import AssociationRequest
 
 router = APIRouter(prefix="/historias", tags=["Histórias de Usuário"])
 
@@ -77,4 +79,27 @@ def delete_story(
   """
   Exclui permanentemente uma história de usuário.
   """
-  return user_story_service.delete_user_story(db, story_id)
+  return user_story_service.delete_user_story(db, story_id, current_user)
+
+@router.post("/{story_id}/associar", status_code=200)
+def associate_item_to_story(
+  story_id: int, 
+  association: AssociationRequest,
+  db: Session = Depends(get_db),
+  current_user: User = Depends(get_current_user)
+):
+  # Definimos fixo que a origem é "US"
+  return association_service.create_association(
+    db, "US", story_id, association, current_user.id
+  )
+
+@router.delete("/{story_id}/desassociar", status_code=200)
+def remove_association_from_story(
+  story_id: int, 
+  association: AssociationRequest,
+  db: Session = Depends(get_db),
+  current_user: User = Depends(get_current_user)
+):
+  return association_service.delete_association(
+    db, "US", story_id, association, current_user.id
+  )
