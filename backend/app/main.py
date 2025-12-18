@@ -13,21 +13,23 @@ app = FastAPI(
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
   erro = exc.errors()[0]
+  tipo_erro = erro.get("type")
+  campo = erro.get('loc')[-1]
   msg_original = erro.get("msg")
   
-  # Remove o prefixo técnico feio "Value error, " se ele existir
-  if "Value error," in msg_original:
-    msg_limpa = msg_original.replace("Value error, ", "")
+  if tipo_erro == "missing":
+    msg_final = f"O campo '{campo}' é obrigatório."
+  
+  elif tipo_erro == "string_too_short":
+    limite = erro.get("ctx", {}).get("min_length")
+    msg_final = f"O campo '{campo}' deve ter pelo menos {limite} caracteres."
+  
   else:
-    msg_limpa = msg_original
-
-  # Se for erro de campo obrigatório (padrão do Pydantic)
-  if erro.get("type") == "missing":
-    msg_limpa = f"O campo '{erro.get('loc')[-1]}' é obrigatório."
+    msg_final = msg_original.replace("Value error, ", "")
 
   return JSONResponse(
     status_code=status.HTTP_400_BAD_REQUEST,
-    content={"detail": msg_limpa}
+    content={"detail": msg_final}
   )
 
 # cors
