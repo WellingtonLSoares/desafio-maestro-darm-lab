@@ -38,3 +38,11 @@ def list_all(
   user = Depends(get_current_user)
 ):
   return business_rule_service.get_rns_paginated(db, skip, limit)
+
+@router.put(
+  "/{rn_id}", 
+  response_model=BusinessRuleResponse,
+  responses=business_rule_update_responses
+)
+def update(rn_id: int, rn: BusinessRuleCreate, db: Session = Depends(get_db), user = Depends(get_current_user)):
+  return business_rule_service.update_rn(db, rn_id, rn)
