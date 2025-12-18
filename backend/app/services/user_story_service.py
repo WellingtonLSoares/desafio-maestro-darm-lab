@@ -6,6 +6,7 @@ from sqlalchemy import and_, desc
 from app.models.item_association import ItemAssociation
 from app.core import logger
 from app.services import association_service
+from app.utils.type_mapper import get_model_by_type
 
 def create_user_story(db: Session, story_data: UserStoryCreate, current_user_id: int):
   db_story = db.query(UserStory).filter(UserStory.title == story_data.title).options(
@@ -44,17 +45,57 @@ def create_user_story(db: Session, story_data: UserStoryCreate, current_user_id:
   return new_story
 
 def get_stories_paginated(db: Session, skip: int = 0, limit: int = 10):
-  """
-  Retorna as histórias de forma paginada.
-  """
-  query = db.query(UserStory).order_by(desc(UserStory.created_at))
-  
+  query = db.query(UserStory).order_by(UserStory.created_at.desc())
+
   total = query.count()
-  items = query.offset(skip).limit(limit).all()
-  
+  stories = query.offset(skip).limit(limit).all()
+
+  story_ids = [s.id for s in stories]
+
+  associations = db.query(ItemAssociation).filter(
+    ItemAssociation.source_type == "US",
+    ItemAssociation.source_id.in_(story_ids)
+  ).all()
+
+  assoc_map = {}
+  for assoc in associations:
+    assoc_map.setdefault(assoc.source_id, []).append(assoc)
+
+  results = []
+
+  for story in stories:
+    associated_data = []
+
+    for assoc in assoc_map.get(story.id, []):
+      model = get_model_by_type(assoc.target_type)
+      
+      if not model:
+        continue
+
+      target_item = db.query(model).filter(model.id == assoc.target_id).first()
+      if not target_item:
+        continue
+
+      associated_data.append({
+        "type": assoc.target_type,
+        "id": assoc.target_id,
+        "display_id": target_item.display_id,
+        "title": target_item.title
+      })
+
+    results.append({
+      "id": story.id,
+      "display_id": story.display_id,
+      "title": story.title,
+      "description": story.description,
+      "owner_id": story.owner_id,
+      "created_at": story.created_at,
+      "associated_items": associated_data
+    })
+
   return {
     "total": total,
-    "items": items,
+    "items": results,
     "skip": skip,
     "limit": limit
   }

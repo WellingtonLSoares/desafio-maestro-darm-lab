@@ -8,6 +8,12 @@ class UserStoryCreate(BaseModel):
   description: str = Field(..., description="Descrição detalhada ou texto rico")
   associations: Optional[List[AssociationRequest]] = []
 
+class AssociatedItem(BaseModel):
+  type: str
+  id: int
+  display_id: str
+  title: str
+
 class UserStoryResponse(BaseModel):
   id: int
   display_id: str
@@ -15,6 +21,7 @@ class UserStoryResponse(BaseModel):
   description: str
   owner_id: int
   created_at: datetime
+  associated_items: List[AssociatedItem] = []
   
   class Config:
     from_attributes = True
