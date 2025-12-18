@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas.user_story_schema import UserStoryCreate, UserStoryResponse, UserStoryPaginatedResponse
+from app.schemas.user_story_schema import UserStoryCreate, UserStoryResponse, UserStoryPaginatedResponse, UserStoryUpdate
 from app.schemas.generic_schema import MessageResponse
 from app.services import user_story_service
 from app.dependencies import get_current_user
@@ -52,7 +52,7 @@ def list_stories(
 
 @router.put(
   "/{story_id}",
-  response_model=UserStoryResponse,
+  response_model=UserStoryUpdate,
   responses=user_story_update_responses
 )
 def update_story(
