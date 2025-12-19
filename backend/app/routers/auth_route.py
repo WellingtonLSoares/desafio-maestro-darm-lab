@@ -48,6 +48,7 @@ def login(login_data: login_schema.UserLogin, db: Session = Depends(get_db)):
   if login_data.remember_me:
     validade_token = timedelta(hours=24)
 
+  # TODO melhorar a criação do token aplicando cookies com http only, secure e samssie para evitar xss e ataques CSRF
   access_token = auth_service.create_access_token(
     data={"sub": user.email},
     expires_delta=validade_token
